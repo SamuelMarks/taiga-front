@@ -65,7 +65,7 @@ function replaceKeys() {
         return new Promise(function (resolve, reject) {
             var key = obj.answers.find_key;
 
-            glob(app + '**/*.+(jade|coffee)', {}, function (er, files) {
+            glob(app + '**/*.+(jade|pug|coffee)', {}, function (er, files) {
                 obj.files = files.filter(function(filepath) {
                     var file = fs.readFileSync(filepath).toString('utf8');
 

@@ -5,7 +5,7 @@ var sizeOf = require('image-size');
 var app = express();
 
 app.set('views', './e2e/gallery');
-app.set('view engine', 'jade');
+app.set('view engine', 'pug');
 app.use('/photoswipe', express.static('node_modules/photoswipe/dist'));
 app.use('/e2e', express.static('./e2e/'));
 

@@ -54,9 +54,10 @@ def verify_keywords_usage():
 
     all_files = []
     for root, dirs, files in os.walk(os.path.join(ROOT_PATH, 'app')):
-        json_and_jade_files = list(filter(lambda x: x.endswith('.coffee') or x.endswith('.jade'), files))
-        json_and_jade_files = map(lambda x: os.path.join(root, x), json_and_jade_files)
-        all_files += json_and_jade_files
+        json_and_pug_files = list(filter(lambda x: x.endswith('.coffee') or x.endswith('.jade') or x.endswith('.pug'),
+                                   files))
+        json_and_pug_files = map(lambda x: os.path.join(root, x), json_and_pug_files)
+        all_files += json_and_pug_files
 
     all_files_text = list(map(read_file, all_files))
 

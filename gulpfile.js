@@ -1,7 +1,7 @@
 var gulp = require("gulp"),
     fs = require('fs'),
     imagemin = require("gulp-imagemin"),
-    jade = require("gulp-jade"),
+    pug = require("gulp-pug"),
     coffee = require("gulp-coffee"),
     concat = require("gulp-concat"),
     uglify = require("gulp-uglify"),
@@ -13,11 +13,11 @@ var gulp = require("gulp"),
     replace = require("gulp-replace"),
     sass = require("gulp-sass"),
     csslint = require("gulp-csslint"),
-    minifyCSS = require("gulp-minify-css"),
+    minifyCSS = require("gulp-clean-css"),
     scsslint = require("gulp-scss-lint"),
     cache = require("gulp-cache"),
     cached = require("gulp-cached"),
-    jadeInheritance = require("gulp-jade-inheritance"),
+    jadeInheritance = require("gulp-pug-inheritance"),
     sourcemaps = require("gulp-sourcemaps"),
     insert = require("gulp-insert"),
     autoprefixer = require("gulp-autoprefixer"),
@@ -217,20 +217,20 @@ var isDeploy = argv["_"].indexOf("deploy") !== -1;
 
 var jadeIncludes = paths.app +'partials/includes/**/*';
 
-gulp.task("jade", function() {
+gulp.task("pug", function() {
     return gulp.src(paths.jade)
         .pipe(plumber())
-        .pipe(cached("jade"))
-        .pipe(jade({pretty: true, locals:{v:version}}))
+        .pipe(cached("pug"))
+        .pipe(pug({pretty: true, locals:{v:version}}))
         .pipe(gulp.dest(paths.tmp));
 });
 
-gulp.task("jade-inheritance", function() {
+gulp.task("pug-inheritance", function() {
     return gulp.src(paths.jade)
         .pipe(plumber())
-        .pipe(cached("jade"))
+        .pipe(cached("pug"))
         .pipe(jadeInheritance({basedir: "./app/"}))
-        .pipe(jade({pretty: true, locals:{v: version}}))
+        .pipe(pug({pretty: true, locals:{v: version}}))
         .pipe(gulp.dest(paths.tmp));
 });
 
@@ -248,12 +248,12 @@ gulp.task("template-cache", function() {
         .pipe(gulpif(!isDeploy, livereload()));
 });
 
-gulp.task("jade-deploy", function(cb) {
-    return runSequence("jade", "copy-index", "template-cache", cb);
+gulp.task("pug-deploy", function(cb) {
+    return runSequence("pug", "copy-index", "template-cache", cb);
 });
 
-gulp.task("jade-watch", function(cb) {
-    return runSequence("jade-inheritance", "copy-index", "template-cache", cb);
+gulp.task("pug-watch", function(cb) {
+    return runSequence("pug-inheritance", "copy-index", "template-cache", cb);
 });
 
 /*
@@ -262,7 +262,7 @@ gulp.task("jade-watch", function(cb) {
 ##############################################################################
 */
 
-gulp.task("scss-lint", [], function() {
+function scssLint(done) {
     var ignore = [
         "!" + paths.app + "/styles/shame/**/*.scss",
     ];
@@ -282,14 +282,16 @@ gulp.task("scss-lint", [], function() {
             };
           }
         })))
-        .pipe(gulpif(fail, scsslint.failReporter()));
-});
+        .pipe(gulpif(fail, scsslint.failReporter()))
+        .on('end', function () { done(); });
+}
 
-gulp.task("clear-sass-cache", function() {
+function clearSassCache(done) {
     delete cached.caches["sass"];
-});
+    done();
+}
 
-gulp.task("sass-compile", [], function() {
+function sassCompile(done) {
     return gulp.src(paths.sass)
         .pipe(addsrc.append(themes.current.customScss))
         .pipe(plumber())
@@ -301,10 +303,11 @@ gulp.task("sass-compile", [], function() {
                 themes.current.path
             ]
         }))
-        .pipe(gulp.dest(paths.tmp));
-});
+        .pipe(gulp.dest(paths.tmp))
+        .on('end', function () { done(); });
+}
 
-gulp.task("css-lint-app", function() {
+function cssLintApp(done) {
     var cssFiles = paths.css.concat(themes.current.customCss);
 
     return gulp.src(cssFiles)
@@ -322,20 +325,22 @@ gulp.task("css-lint-app", function() {
             };
           }
         })))
-        .pipe(csslint.reporter());
-});
+        .pipe(csslint.reporter())
+        .on('end', function () { done(); });
+}
 
-gulp.task("app-css", function() {
+function appCss(done) {
     return gulp.src(paths.css)
         .pipe(order(paths.css_order, {base: '.'}))
         .pipe(concat("theme-" + themes.current.name + ".css"))
         .pipe(autoprefixer({
             cascade: false
         }))
-        .pipe(gulp.dest(paths.tmp));
-});
+        .pipe(gulp.dest(paths.tmp))
+        .on('end', function () { done(); });
+}
 
-gulp.task("vendor-css", function() {
+function vendorCss(done) {
     var isPrism = function(file) {
         return file.path.indexOf('prism-okaidia') !== -1;
     };
@@ -343,10 +348,11 @@ gulp.task("vendor-css", function() {
     return gulp.src(paths.css_vendor)
         .pipe(gulpif(isPrism, classPrefix('prism-')))
         .pipe(concat("vendor.css"))
-        .pipe(gulp.dest(paths.tmp));
-});
+        .pipe(gulp.dest(paths.tmp))
+        .on('end', function () { done(); });
+}
 
-gulp.task("main-css", function() {
+function mainCss(done) {
     var _paths = [
         paths.tmp + "vendor.css",
         paths.tmp + "theme-" + themes.current.name + ".css"
@@ -356,55 +362,41 @@ gulp.task("main-css", function() {
         .pipe(concat("theme-" + themes.current.name + ".css"))
         .pipe(gulpif(isDeploy, minifyCSS({noAdvanced: true})))
         .pipe(gulp.dest(paths.distVersion + "styles/"))
-        .pipe(livereload());
-});
+        .pipe(livereload())
+        .on('end', function () { done(); });
+}
 
-var compileThemes = function (cb) {
-    return runSequence("clear",
-                       "scss-lint",
-                       "sass-compile",
-                       "css-lint-app",
-                       ["app-css", "vendor-css"],
-                       "main-css",
-                       function() {
-                           themes.next();
+function compileThemes(done) {
+    themes.next();
 
-                           if (themes.current) {
-                               compileThemes(cb);
-                           } else {
-                               cb();
-                           }
-                       });
-};
+    if (themes.current) {
+        return gulp.series(clear, scssLint, sassCompile, cssLintApp,
+            appCss, vendorCss,
+            mainCss, done)
+    } else {
+        done();
+    }
+}
 
-gulp.task("compile-themes", function(cb) {
-    compileThemes(cb);
-});
+exports.compileThemes = compileThemes;
 
-gulp.task("styles", function(cb) {
-    return runSequence("scss-lint",
-                       "sass-compile",
-                       ["app-css", "vendor-css"],
-                       "main-css",
-                       cb);
-});
 
-gulp.task("styles-lint", function(cb) {
-    return runSequence("scss-lint",
-                       "sass-compile",
-                       "css-lint-app",
-                       ["app-css", "vendor-css"],
-                       "main-css",
-                       cb);
-});
+exports.styles = gulp.series(scssLint,
+        sassCompile,
+        gulp.parallel(appCss, vendorCss),
+        mainCss);
 
-gulp.task("styles-dependencies", function(cb) {
-    return runSequence("clear-sass-cache",
-                       "sass-compile",
-                       ["app-css", "vendor-css"],
-                       "main-css",
-                       cb);
-});
+exports.stylesLint = gulp.series(scssLint,
+    sassCompile,
+    cssLintApp,
+    gulp.parallel(appCss, vendorCss),
+    mainCss);
+
+
+exports.stylesDependencies = gulp.series(clearSassCache,
+    sassCompile,
+    gulp.parallel(appCss, vendorCss),
+    mainCss);
 
 /*
 ##############################################################################
@@ -412,11 +404,11 @@ gulp.task("styles-dependencies", function(cb) {
 ##############################################################################
 */
 
-gulp.task("prism-languages", function(cb) {
+function prismLanguages(done) {
     var files = fs.readdirSync(paths.modules + "prismjs/components");
 
     files = files.filter(function(file) {
-        return file.indexOf('.min.js') != -1;
+        return file.indexOf('.min.js') !== -1;
     });
 
     files = files.map(function(file) {
@@ -432,10 +424,10 @@ gulp.task("prism-languages", function(cb) {
         flag: 'w+'
     });
 
-    cb();
-});
+    done();
+}
 
-gulp.task("emoji", function(cb) {
+function emoji(done) {
     // don't add to package.json
     var Jimp = require("jimp");
 
@@ -480,23 +472,25 @@ gulp.task("emoji", function(cb) {
         flag: 'w+'
     });
 
-    cb();
-});
+    done();
+}
 
-gulp.task("conf", function() {
+function conf(done) {
     return gulp.src(["conf/conf.example.json"])
-        .pipe(gulp.dest(paths.dist));
-});
+        .pipe(gulp.dest(paths.dist))
+        .on('end', function () { done(); });;
+}
 
-gulp.task("app-loader", function() {
+function appLoader(done) {
     return gulp.src("app-loader/app-loader.coffee")
         .pipe(replace("___VERSION___", version))
         .pipe(coffee())
         .pipe(gulpif(isDeploy, uglify()))
-        .pipe(gulp.dest(paths.distVersion + "js/"));
-});
+        .pipe(gulp.dest(paths.distVersion + "js/"))
+        .on('end', function () { done(); });
+}
 
-gulp.task("locales", function() {
+function locales(done) {
     var plugins = gulp.src(paths.app + "modules/**/locales/*.json")
         .pipe(rename(function (localeFile) {
             // rename app/modules/compiles-modules/tg-contrib/locales/locale-en.json
@@ -511,11 +505,14 @@ gulp.task("locales", function() {
     var core = gulp.src(paths.locales);
 
     return mergeStream(plugins, core)
-            .pipe(gulpif(isDeploy, jsonminify()))
-            .pipe(gulp.dest(paths.distVersion + "locales"));
-});
+        .pipe(gulpif(isDeploy, jsonminify()))
+        .pipe(gulp.dest(paths.distVersion + "locales"))
+        .on('end', function () {
+            done();
+        });
+}
 
-gulp.task("coffee-lint", function () {
+function coffeeLint(done) {
     gulp.src([
         paths.app + "modules/**/*.coffee",
         "!" + paths.app + "modules/**/*.spec.coffee"
@@ -533,10 +530,11 @@ gulp.task("coffee-lint", function () {
                 };
             }
         })))
-        .pipe(coffeelint.reporter());
-});
+        .pipe(coffeelint.reporter())
+        .on('end', function () { done(); });
+}
 
-gulp.task("coffee", function() {
+function coffee(done) {
     var filter = gulpFilter(['*', '!*.map']);
 
     return gulp.src(paths.coffee)
@@ -551,8 +549,9 @@ gulp.task("coffee", function() {
         .pipe(sourcemaps.write('./maps'))
         .pipe(gulp.dest(paths.distVersion + "js/"))
         .pipe(filter)
-        .pipe(livereload());
-});
+        .pipe(livereload())
+        .on('end', function () { done(); });
+}
 
 gulp.task("moment-locales", function() {
     return gulp.src(paths.modules + "moment/locale/*")
@@ -725,7 +724,7 @@ gulp.task("express", function() {
 gulp.task("watch", function() {
     livereload.listen();
 
-    gulp.watch(paths.jade, ["jade-watch"]);
+    gulp.watch(paths.jade, ["pug-watch"]);
     gulp.watch(paths.sass_watch, ["styles-lint"]);
     gulp.watch(paths.styles_dependencies, ["styles-dependencies"]);
     gulp.watch(paths.svg, ["copy-svg"]);
@@ -739,7 +738,7 @@ gulp.task("watch", function() {
 gulp.task("deploy", function(cb) {
     runSequence("clear", "delete-old-version", "delete-tmp", [
         "copy",
-        "jade-deploy",
+        "pug-deploy",
         "app-deploy",
         "jslibs-deploy",
         "link-images",
@@ -753,7 +752,7 @@ gulp.task("default", function(cb) {
         "styles",
         "app-watch",
         "jslibs-watch",
-        "jade-deploy",
+        "pug-deploy",
         "express",
         "watch"
     ], cb);
